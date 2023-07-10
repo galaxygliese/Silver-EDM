@@ -1,3 +1,5 @@
+<img src="./images/silver-edm.png" width="100%" />
+
 # Simple Implementation of Elucidating the Design Space of Diffusion-Based Generative Models (EDM)
 Project base of Elucidating the Design Space of Diffusion-Based Generative Models (EDM)
 
