@@ -2,7 +2,7 @@
 
 from torchvision.utils import make_grid, save_image
 from diffusion.denoisers import Denoiser, get_sigmas_karras, sample_dpmpp_2m, sample_heun
-from diffusion import create_model, ModelType
+from diffusion import create_edm_model, ModelType
 from tqdm.auto import tqdm
 from PIL import Image
 import torchvision.transforms as transforms
@@ -15,7 +15,7 @@ parser = argparse.ArgumentParser()
 
 # General options
 parser.add_argument('-w', '--checkpoint', type=str, default="./weights/bench_t-push-edm-diffusion-epoch50.pt")
-parser.add_argument('-e', '--export_video', type=str, default="results/vis.mp4")
+parser.add_argument('-e', '--export_file', type=str, default="./results/exported.png")
 parser.add_argument('-d', '--dataset', type=str, default="./data/pusht_cchi_v7_replay.zarr.zip")
 parser.add_argument('--max_steps', type=int, default=200)
 parser.add_argument('--diffusion_timesteps', type=int, default=40)
@@ -26,6 +26,8 @@ parser.add_argument('--dataset_path', type=str)
 parser.add_argument('--image_size', type=int, default=256)
 parser.add_argument('--in_channels', type=int, default=3)
 parser.add_argument('--out_channels', type=int, default=3)
+parser.add_argument('--num_channels', type=int, default=64)
+parser.add_argument('--num_res_blocks', type=int, default=1)
 parser.add_argument('--sample_num', type=int, default=4)
 
 # Karras (EDM) options
@@ -38,12 +40,9 @@ parser.add_argument('--rho', type=float, default=7.0)
 opt = parser.parse_args()
 
 def create_inner_model(model_type:ModelType = ModelType.CNN):
-    obs_dim = opt.obs_dim
-    action_dim = opt.action_dim
-
     # create network object
     if model_type == ModelType.CNN:
-        inner_model = create_model(
+        inner_model = create_edm_model(
             image_size=opt.image_size,
             num_channels=opt.num_channels,
             num_res_blocks=opt.num_res_blocks,
@@ -89,8 +88,6 @@ def generate(ema_noise_pred_net, model_type:ModelType, sigma_max:float, sigma_mi
     print("Done!")
 
 def main():
-    max_steps = opt.max_steps
-
     num_diffusion_iters = opt.diffusion_timesteps
     device = torch.device('cuda')
 
@@ -101,7 +98,17 @@ def main():
     sigma_min = opt.sigma_min 
     rho = opt.rho
 
-    generate(ema_noise_pred_net, model_type, sigma_max, sigma_min, rho, num_diffusion_iters, export_name="export.png", sample_num=opt.sample_num, device=device)
+    generate(
+        ema_noise_pred_net, 
+        model_type=model_type, 
+        sigma_max=sigma_max, 
+        sigma_min=sigma_min, 
+        rho=rho, 
+        num_diffusion_iters=num_diffusion_iters, 
+        export_name=opt.export_file, 
+        sample_num=opt.sample_num, 
+        device=device,
+    )
 
 if __name__ == '__main__':
-    generate()
+    main()
