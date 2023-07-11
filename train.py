@@ -107,6 +107,7 @@ def train():
                     loss_cpu = loss.item()
                     epoch_loss.append(loss_cpu)
                     tepoch.set_postfix(loss=loss_cpu)
+
             run.log({"train-loss": np.mean(epoch_loss)})
             tglobal.set_postfix(loss=np.mean(epoch_loss))   
         
