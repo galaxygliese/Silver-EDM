@@ -51,6 +51,11 @@ parser.add_argument('--sigma_sample_density_std', type=float, default=1.2)
 parser.add_argument('--sigma_max', type=float, default=80)
 parser.add_argument('--sigma_min', type=float, default=0.0002)
 parser.add_argument('--rho', type=float, default=7.0)
+
+# Resuming options
+parser.add_argument('--resume', action='store_true')
+parser.add_argument('--resume_checkpoint', type=str)
+parser.add_argument('--resume_epochs', type=int, default=0)
 opt = parser.parse_args()
 
 device = 'cuda'
@@ -71,7 +76,7 @@ def create_inner_model(model_type:ModelType = ModelType.CNN):
     return inner_model
 
 def train():
-    with tqdm(range(opt.epochs), desc='Epoch') as tglobal:
+    with tqdm(range(opt.resume_epochs, opt.epochs), desc='Epoch') as tglobal:
         # epoch loop
         for epoch_idx in tglobal:
             epoch_loss = list()
@@ -128,7 +133,7 @@ def train():
                     sample_num=4
                 )
 
-        torch.save(noise_pred_net.state_dict(), f'{opt.export_folder}/edm-latent-diffusion-{opt.model_type}-epoch{epoch_idx+1}'+'.pt')
+        torch.save(noise_pred_net.state_dict(), f'{opt.export_folder}/edm-latent-diffusion-{opt.model_type}-epoch{opt.epochs+1}'+'.pt')
 
 @torch.no_grad()
 def generate(ema_noise_pred_net, model_type:ModelType, sigma_max:float, sigma_min:float, rho:float, num_diffusion_iters:int, export_name:str, sample_num:int, device:str='cuda'):
@@ -196,6 +201,12 @@ if __name__ == '__main__':
     device = torch.device('cuda')
     _ = inner_model.to(device)
     noise_pred_net = Denoiser(inner_model=inner_model, sigma_data=opt.sigma_data)
+    if opt.resume:
+        state_dict = torch.load(opt.resume_checkpoint, map_location='cuda')
+        noise_pred_net.load_state_dict(state_dict)
+        print("Pretrained Model Loaded")
+    state_dict = torch.load(opt.resume_checkpoint, map_location='cuda')
+    noise_pred_net.load_state_dict(state_dict)
 
     sample_density = partial(rand_log_normal, loc=opt.sigma_sample_density_mean, scale=opt.sigma_sample_density_std)
 
@@ -224,7 +235,8 @@ if __name__ == '__main__':
         num_training_steps=len(dataloader) * opt.epochs
     )
 
-    run = wandb.init(project = 'edm_latent_diffusion')
+    # TODO: fix wandb resume
+    run = wandb.init(project = 'edm_latent_diffusion', resume = opt.resume)
     config = run.config
     config.epochs = opt.epochs
     config.batchsize = opt.batchsize

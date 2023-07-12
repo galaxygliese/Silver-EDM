@@ -125,7 +125,7 @@ def train():
                     sample_num=4
                 )
 
-        torch.save(noise_pred_net.state_dict(), f'{opt.export_folder}/edm-diffusion-{opt.model_type}-epoch{epoch_idx+1}'+'.pt')
+        torch.save(noise_pred_net.state_dict(), f'{opt.export_folder}/edm-diffusion-{opt.model_type}-epoch{opt.epochs}'+'.pt')
 
 @torch.no_grad()
 def generate(ema_noise_pred_net, model_type:ModelType, sigma_max:float, sigma_min:float, rho:float, num_diffusion_iters:int, export_name:str, sample_num:int, device:str='cuda'):
