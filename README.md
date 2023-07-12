@@ -5,7 +5,7 @@ Project base of Elucidating the Design Space of Diffusion-Based Generative Model
 
 [[Original Repo](https://github.com/NVlabs/edm#elucidating-the-design-space-of-diffusion-based-generative-models-edmofficial-pytorch-implementation-of-the-neurips-2022-paper)] [[Paper Link](https://arxiv.org/abs/2206.00364)]
 
-## :gift: Userful for
+## :gift: Useful for
 
 A PyTorch re-implementation of [EDM](https://github.com/NVlabs/edm#elucidating-the-design-space-of-diffusion-based-generative-models-edmofficial-pytorch-implementation-of-the-neurips-2022-paper). Silver EDM tries to be small, clean, interpretable and educational, as most of the currently available diffusion models implementations can a bit sprawling. It can be used in the following situations :
 
@@ -49,7 +49,7 @@ python3 generate_ldm.py --checkpoint /path/to/checkpoint --sample_num 4
 ```
 
 
-## :hourglass_flowing_sand: Coming Soon...
+## :hourglass_flowing_sand: Todos
 
 - [Consistency Models](https://github.com/openai/consistency_models)
 - [Transformer EDM](https://github.com/facebookresearch/DiT/tree/main)
