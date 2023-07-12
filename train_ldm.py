@@ -2,9 +2,10 @@
 
 from diffusion import create_edm_model, rand_log_normal, Denoiser, ModelType
 from diffusion.denoisers import Denoiser, get_sigmas_karras, sample_dpmpp_2m, sample_heun
+from diffusers.models import AutoencoderKL
 from torchvision.utils import make_grid
-from torchvision.transforms import Compose, Lambda
-from dataset import FolderDataset
+from torchvision import transforms as T
+from dataset import FolderDataset, expand2square
 
 from diffusers.training_utils import EMAModel
 from diffusers.optimization import get_scheduler
@@ -40,8 +41,8 @@ parser.add_argument('--save-per-epoch', type=int, default=5)
 # Dataset options
 parser.add_argument('--dataset_path', type=str)
 parser.add_argument('--image_size', type=int, default=256)
-parser.add_argument('--in_channels', type=int, default=3)
-parser.add_argument('--out_channels', type=int, default=3)
+parser.add_argument('--in_channels', type=int, default=4)
+parser.add_argument('--out_channels', type=int, default=4)
 
 # Karras (EDM) options
 parser.add_argument('--sigma_data', type=float, default=0.5)
@@ -50,15 +51,21 @@ parser.add_argument('--sigma_sample_density_std', type=float, default=1.2)
 parser.add_argument('--sigma_max', type=float, default=80)
 parser.add_argument('--sigma_min', type=float, default=0.0002)
 parser.add_argument('--rho', type=float, default=7.0)
+
+# Resuming options
+parser.add_argument('--resume', action='store_true')
+parser.add_argument('--resume_checkpoint', type=str)
+parser.add_argument('--resume_epochs', type=int, default=0)
 opt = parser.parse_args()
 
 device = 'cuda'
+LATENT_DIM = opt.image_size // 8
 
 def create_inner_model(model_type:ModelType = ModelType.CNN):
     # create network object
     if model_type == ModelType.CNN:
         inner_model = create_edm_model(
-            image_size=opt.image_size,
+            image_size=LATENT_DIM, # For VAE latent
             num_channels=opt.num_channels,
             num_res_blocks=opt.num_res_blocks,
             in_channels=opt.in_channels,
@@ -69,7 +76,7 @@ def create_inner_model(model_type:ModelType = ModelType.CNN):
     return inner_model
 
 def train():
-    with tqdm(range(opt.epochs), desc='Epoch') as tglobal:
+    with tqdm(range(opt.resume_epochs, opt.epochs), desc='Epoch') as tglobal:
         # epoch loop
         for epoch_idx in tglobal:
             epoch_loss = list()
@@ -80,16 +87,17 @@ def train():
                     # data normalized in dataset
                     # device transfer
                     nimage = nbatch.to(device)
-                    B = nimage.shape[0]
+                    nlatent = encode_img(nimage)
+                    B = nlatent.shape[0]
 
                     # sample noise to add to actions
-                    noise = torch.randn(nimage.shape, device=device)
+                    noise = torch.randn(nlatent.shape, device=device)
 
                     # sample a diffusion iteration for each data point
                     sigmas = sample_density([B], device=device)
                         
                     # # L2 loss
-                    loss = noise_pred_net.loss(nimage, noise, sigmas, global_cond=None)
+                    loss = noise_pred_net.loss(nlatent, noise, sigmas, global_cond=None)
                     loss = loss.mean()
 
                     # optimize
@@ -112,7 +120,7 @@ def train():
             tglobal.set_postfix(loss=np.mean(epoch_loss))   
         
             if (epoch_idx + 1) % opt.save_per_epoch == 0:
-                torch.save(noise_pred_net.state_dict(), f'{opt.export_folder}/[training]edm-diffusion-{opt.model_type}-epoch{epoch_idx+1}'+'.pt')
+                torch.save(noise_pred_net.state_dict(), f'{opt.export_folder}/[training]edm-latent-diffusion-{opt.model_type}-epoch{epoch_idx+1}'+'.pt')
                 noise_pred_net.eval()
                 generate(
                     ema_noise_pred_net=noise_pred_net,
@@ -125,7 +133,7 @@ def train():
                     sample_num=4
                 )
 
-        torch.save(noise_pred_net.state_dict(), f'{opt.export_folder}/edm-diffusion-{opt.model_type}-epoch{opt.epochs}'+'.pt')
+        torch.save(noise_pred_net.state_dict(), f'{opt.export_folder}/edm-latent-diffusion-{opt.model_type}-epoch{opt.epochs+1}'+'.pt')
 
 @torch.no_grad()
 def generate(ema_noise_pred_net, model_type:ModelType, sigma_max:float, sigma_min:float, rho:float, num_diffusion_iters:int, export_name:str, sample_num:int, device:str='cuda'):
@@ -133,24 +141,40 @@ def generate(ema_noise_pred_net, model_type:ModelType, sigma_max:float, sigma_mi
     obs_cond = None
     with torch.no_grad():
         # initialize action from Guassian noise
-        noisy_image = torch.randn(
-            (B, opt.in_channels, opt.image_size, opt.image_size), device=device)
-        nimage = noisy_image * sigma_max
+        noisy_latent = torch.randn(
+            (B, opt.in_channels, LATENT_DIM, LATENT_DIM), device=device)
+        nlatent = noisy_latent * sigma_max
         sigmas = get_sigmas_karras(num_diffusion_iters, sigma_min, sigma_max, rho=rho, device=device)
-        nimage = sample_dpmpp_2m(ema_noise_pred_net, nimage, sigmas, disable=True, extra_args={'global_cond':obs_cond})
-        nimage = nimage.detach().to('cpu')
+        nlatent = sample_dpmpp_2m(ema_noise_pred_net, nlatent, sigmas, disable=True, extra_args={'global_cond':obs_cond})
+        nimage = decode_img(nlatent)
+        imgs = nimage.detach().to('cpu')
         
-        imgs = 0.5*(nimage+1)
         img = make_grid(imgs)
         img = transforms.functional.to_pil_image(img)
         # (B, 3, H, W)
     img = Image.fromarray(np.asarray(img))
     img.save(export_name)
 
+def encode_img(img:torch.Tensor):
+    z = vae.encode(img).latent_dist.sample().detach() # z : (B, 4, 32, 32)
+    return z 
+
+def decode_img(z:torch.Tensor):
+    x = vae.decode(z).sample 
+    return x 
+
 if __name__ == '__main__':
+    image_transform = T.Compose([
+        T.Lambda(lambda img: img.convert('RGB') if img.mode != 'RGB' else img),
+        T.Lambda(lambda img: expand2square(img)),
+        T.Resize(opt.image_size),
+        T.CenterCrop(opt.image_size),
+        T.ToTensor(),
+    ])
     dataset = FolderDataset(
         folder_path=opt.dataset_path,
         image_size=opt.image_size,
+        transform=image_transform
     )
 
     # create dataloader
@@ -177,6 +201,12 @@ if __name__ == '__main__':
     device = torch.device('cuda')
     _ = inner_model.to(device)
     noise_pred_net = Denoiser(inner_model=inner_model, sigma_data=opt.sigma_data)
+    if opt.resume:
+        state_dict = torch.load(opt.resume_checkpoint, map_location='cuda')
+        noise_pred_net.load_state_dict(state_dict)
+        print("Pretrained Model Loaded")
+    state_dict = torch.load(opt.resume_checkpoint, map_location='cuda')
+    noise_pred_net.load_state_dict(state_dict)
 
     sample_density = partial(rand_log_normal, loc=opt.sigma_sample_density_mean, scale=opt.sigma_sample_density_std)
 
@@ -185,6 +215,12 @@ if __name__ == '__main__':
         power=opt.ema_power,
         parameters=noise_pred_net.parameters(),
     )
+
+    vae = AutoencoderKL.from_pretrained("stabilityai/sd-vae-ft-ema").to(device)
+    vae.eval()
+    for param in vae.parameters():
+        param.requires_grad = False
+    print("VAE Loaded!")
 
     optimizer = torch.optim.AdamW(
         params=inner_model.parameters(), 
@@ -199,7 +235,8 @@ if __name__ == '__main__':
         num_training_steps=len(dataloader) * opt.epochs
     )
 
-    run = wandb.init(project = 'edm_diffusion')
+    # TODO: fix wandb resume
+    run = wandb.init(project = 'edm_latent_diffusion', resume = opt.resume)
     config = run.config
     config.epochs = opt.epochs
     config.batchsize = opt.batchsize
