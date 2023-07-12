@@ -56,6 +56,7 @@ python3 generate_ldm.py --checkpoint /path/to/checkpoint --sample_num 4
 - EDM for 1D and 3D datas
 - [SDE-Edit](https://github.com/ermongroup/SDEdit)
 - [Super Resolutions](https://github.com/Janspiry/Image-Super-Resolution-via-Iterative-Refinement)
+- [ControlNet](https://github.com/lllyasviel/ControlNet)
 
 
 ## :bookmark_tabs: Citations
