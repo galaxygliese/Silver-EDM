@@ -205,8 +205,6 @@ if __name__ == '__main__':
         state_dict = torch.load(opt.resume_checkpoint, map_location='cuda')
         noise_pred_net.load_state_dict(state_dict)
         print("Pretrained Model Loaded")
-    state_dict = torch.load(opt.resume_checkpoint, map_location='cuda')
-    noise_pred_net.load_state_dict(state_dict)
 
     sample_density = partial(rand_log_normal, loc=opt.sigma_sample_density_mean, scale=opt.sigma_sample_density_std)
 
