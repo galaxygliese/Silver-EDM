@@ -7,7 +7,7 @@ Project base of Elucidating the Design Space of Diffusion-Based Generative Model
 
 ## :gift: Userful for
 
-This repogitory is implemented as a project base for the diffusion model. It can be used in the following situations :
+A PyTorch re-implementation of [EDM](https://github.com/NVlabs/edm#elucidating-the-design-space-of-diffusion-based-generative-models-edmofficial-pytorch-implementation-of-the-neurips-2022-paper). Silver EDM tries to be small, clean, interpretable and educational, as most of the currently available diffusion models implementations can a bit sprawling. It can be used in the following situations :
 
 - :white_check_mark: **No fine tuning resources for Stable Diffusion.**
 - :white_check_mark: **Easy to setup for domain-specific tasks**
